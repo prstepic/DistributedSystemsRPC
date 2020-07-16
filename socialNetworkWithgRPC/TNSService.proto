@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package TNSService;
+
+service user_services {
+	// Sends a message including the current user's name
+	rpc InitializeUser (current_user) returns (server_status) {}
+	
+	// Sends a message including current user and user to follow
+	rpc FollowRequest (command_info) returns (server_status) {}
+
+	// Sends a message including current user and user to unfollow
+	rpc UnfollowRequest (command_info) returns (server_status) {}
+
+	// Sends a message including the current user's name
+	rpc ListRequest (current_user) returns (stream following_user_message) {}
+
+	// Sends a stream of posts and returns a stream of posts from followed users
+	rpc TimelineRequest (stream post_info) returns (stream post_info) {}
+
+}
+
+// message containing the sender's username and another user's name
+message command_info {
+	string username = 1;
+	string username_other_user = 2;
+}
+
+// message that contains the server's status after receiving a request
+// enum in messages from 
+// developers.google.com/protocol-buffers/docs/proto3
+message server_status {
+	enum IStatus {
+		SUCCESS = 0;
+		FAILURE_ALREADY_EXISTS = 1;
+		FAILURE_NOT_EXISTS = 2;
+		FAILURE_INVALID_USERNAME = 3;
+		FAILURE_INVALID = 4;
+		FAILURE_UNKNOWN = 5;
+	};
+	IStatus s_status = 1;
+}
+
+// message containing the sender's username
+message current_user {
+	string username = 1;
+}
+
+// message containing the username of a following user
+message following_user_message {
+	enum IStatus {
+		SUCCESS = 0;
+		FAILURE_ALREADY_EXISTS = 1;
+		FAILURE_NOT_EXISTS = 2;
+		FAILURE_INVALID_USERNAME = 3;
+		FAILURE_INVALID = 4;
+		FAILURE_UNKNOWN = 5;
+	}
+	string username = 1;
+	string user_in_all_users = 2;
+	IStatus s_status = 3;
+}
+
+// message that contains: the username of the user that created the post,
+// the time (must convert into a string on client and server side),
+// the actual content of the post
+message post_info {
+	string username = 1;
+	string time = 2;
+	string content = 3;
+	bool requesting_update = 4;
+}
+
