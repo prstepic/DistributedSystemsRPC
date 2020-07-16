@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package TNSService;
+
+service user_services {
+	// Sends a message including the current user's name
+	rpc InitializeUser (current_user) returns (server_status) {}
+	
+	// Sends a message including current user and user to follow
+	rpc FollowRequest (command_info) returns (server_status) {}
+
+	// Sends a message including current user and user to unfollow
+	rpc UnfollowRequest (command_info) returns (server_status) {}
+
+	// Sends a message including the current user's name
+	rpc ListRequest (current_user) returns (stream following_user_message) {}
+
+	// Sends a stream of posts and returns a stream of posts from followed users
+	rpc TimelineRequest (stream post_info) returns (stream post_info) {}
+
+	// Sends a request for an available server (will only be used on the router server)
+	rpc RequestForServer (client_info) returns (available_server) {}
+
+	rpc CheckForResponse (stream client_id) returns (stream available_status) {}
+
+	rpc UpdateRouter (stream available_server) returns (stream available_server) {}
+
+	rpc Ping (stream available_status) returns (stream available_status) {}
+}
+
+// message containing the sender's username and another user's name
+message command_info {
+	string username = 1;
+	string username_other_user = 2;
+}
+
+// message that contains the server's status after receiving a request
+// enum in messages from 
+// developers.google.com/protocol-buffers/docs/proto3
+message server_status {
+	enum IStatus {
+		SUCCESS = 0;
+		FAILURE_ALREADY_EXISTS = 1;
+		FAILURE_NOT_EXISTS = 2;
+		FAILURE_INVALID_USERNAME = 3;
+		FAILURE_INVALID = 4;
+		FAILURE_UNKNOWN = 5;
+	};
+	IStatus s_status = 1;
+}
+
+// message containing the sender's username
+message current_user {
+	string username = 1;
+}
+
+// message containing the username of a following user
+// and status of message
+message following_user_message {
+	enum IStatus {
+		SUCCESS = 0;
+		FAILURE_ALREADY_EXISTS = 1;
+		FAILURE_NOT_EXISTS = 2;
+		FAILURE_INVALID_USERNAME = 3;
+		FAILURE_INVALID = 4;
+		FAILURE_UNKNOWN = 5;
+	}
+	string username = 1;
+	string user_in_all_users = 2;
+	IStatus s_status = 3;
+}
+
+// message that contains: the username of the user that created the post,
+// the time (must convert into a string on client and server side),
+// the actual content of the post
+// and if it is a request to update message
+message post_info {
+	string username = 1;
+	string time = 2;
+	string content = 3;
+	bool requesting_update = 4;
+}
+
+// this message is sent by the client to the server to request an available server
+// the client will provide their ip address to the server
+// the client will also send their currently connected server so the router knows which
+message client_info {
+	string ip_server = 1;
+	string port = 2;
+}
+
+// this message is sent back to the client from the server that contains the ip address of
+// the available server and it's available port
+message available_server {
+	string ip_addr = 1;
+	string port = 2;
+	bool online = 3;
+}
+
+message client_id {
+	string ip_addr = 1;
+}
+
+message available_status {
+	bool available = 1;
+}
+
+
+
