@@ -1,5 +1,7 @@
 README
 
+This is a scalable fault tolerant verison of the other Social Network Project. This implementation contains a routing server that is assumed to always be available. A client will contact the router and the router will send the client an IP address of an available server using an election algorithm. Each master server has a slave server that will be used to restart the server if it goes down.
+
 Instructions to run program
 
 First start the router server
