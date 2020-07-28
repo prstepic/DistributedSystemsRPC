@@ -245,14 +245,166 @@ class TNSServiceImpl final : public user_services::Service{
 	}
 
 	void restore_server(){
+		// open the log file
+		old_log_file.open("new_server_log.txt");
+		std::string history;
 
+		// initialized users must remain persistent through server shutdowns
+		std::vector<std::string> initialized_users;
+		if(old_log_file.is_open()){
+			
+			// execute restoration
+			while(getline(old_log_file, history)){
+				// parse the first word of the line for the command
+				if(history.substr(0,10) == "INITIALIZE"){
+					
+					// create a new user
+					user* new_user = new user();
+					
+					if(users_db.find(history.substr(11)) == users_db.end()){
+						// add to the database and all users list
+						users_db.insert(std::pair<std::string, user*>(history.substr(11), new_user));
+						all_users.push_back(history.substr(11));
+						
+						// add the user to their own followers and following
+						users_db.at(history.substr(11))->followers.push_back(history.substr(11));
+						users_db.at(history.substr(11))->following.push_back(history.substr(11));
+						
+						
+						// add to initialized users
+						initialized_users.push_back(history.substr(11));
+					}
+				}
+				else if(history.substr(0,6) == "FOLLOW"){
+					// get the user requesting the follow
+					// and the requested user
+					std::size_t index = history.find_first_of("|");
+					std::string requesting_user = history.substr(7,index - 7);
+					std::string requested_user = history.substr(index+1);
+				
+					// add the requested user to requesting's following
+					users_db.at(requesting_user)->following.push_back(requested_user);
+				
+					// add the requesting user to the requested's followers
+					users_db.at(requested_user)->followers.push_back(requesting_user);
+
+					// add requested user's posts to the requesting's timeline
+					if(!users_db.at(requested_user)->posts.empty()){
+						int i = 0;
+						int num_posts = users_db.at(requested_user)->posts.size();
+						while(i != num_posts){
+							if(users_db.at(requesting_user)->timeline.size() == 20){
+								users_db.at(requesting_user)->timeline.pop();
+							}
+							users_db.at(requesting_user)->timeline.push(
+									users_db.at(requested_user)->posts.at(num_posts - (i+1)));
+							i++;				
+						}
+					}
+				}
+				else if(history.substr(0,8) == "UNFOLLOW"){
+					// get the requesting and requested usernames
+					std::size_t index = history.find_first_of("|");
+					std::string requesting_user = history.substr(9,index - 9);
+					std::string requested_user = history.substr(index+1);
+				
+					// remove the requesting from the requested's followers
+					int position_to_remove1 = find_follower(users_db.at(requesting_user)->following, requested_user);
+					int position_to_remove2 = find_follower(users_db.at(requested_user)->followers, requesting_user);
+					users_db.at(requesting_user)->following.erase(users_db.at(requesting_user)->
+												following.begin() + position_to_remove1);
+					
+					users_db.at(requested_user)->followers.erase(users_db.at(requested_user)->
+												followers.begin() + position_to_remove2);
+
+				}
+				else if(history.substr(0,4) == "POST"){
+					// construct the post
+					std::vector<std::string> post_info;
+					std::size_t index_user = history.find_first_of("|");
+					std::string user = history.substr(5, index_user - 5);
+					std::string rest_of_post = history.substr(index_user+1);
+					std::size_t index_time = rest_of_post.find_first_of("|");
+					std::string time = rest_of_post.substr(0, index_time);
+					std::string content = rest_of_post.substr(index_time + 1);
+					post_info.push_back(user);
+					post_info.push_back(time);
+					post_info.push_back(content);
+					
+					// add this post to the user's timeline and posts
+					users_db.at(user)->timeline.push(post_info);
+					users_db.at(user)->posts.push_back(post_info);
+					
+					// add the post to all of the user's followers
+					std::vector<std::string> user_followers = users_db.at(user)->followers;
+					if(!user_followers.empty()){
+						for(int i = 0; i < user_followers.size(); i++){
+							// don't add the post to the user's timeline again
+							if(user_followers.at(i) != user){
+								// if the user has 20 posts in their timeline pop the oldest one
+								if(users_db.at(user_followers.at(i))->timeline.size() == 20){
+									users_db.at(user_followers.at(i))->timeline.pop();
+								}
+								// add post to the timeline
+								users_db.at(user_followers.at(i))->timeline.push(post_info);
+							}
+						}
+					}
+				
+				}
+			}
+		}
+		// clear the file to be written again
+		old_log_file.close();
+		return initialized_users;
 	}
 	
-	void add_to_log(std::string) {
+	public:
+	// function that will build and run the server
+	// public because main needs to call this function
+	void run_server(std::string hostname, std::string port_no) {
+		// Before building the server, restore the previous users
+		std::vector<std::string> initialized_users = restore_server();
+		
+		// add the initialized users as the first commands in the server log
+		new_log_file.open("new_server_log.txt");
+		if(!new_log_file.is_open()){
+			std::cout<<"could not open server log:"<<std::endl;
+			std::exit(0);
+		}
+		
+		// add all initialized users to the log file so they can be maintained through
+		// future server logs
+		if(!initialized_users.empty()){
+			for(int i = 0; i < initialized_users.size(); i++){
+				new_log_file << "INITIALIZE " + initialized_users.at(i) + "\n";
+			}
+		}
+		
+		// build and run the server on local host
+		ServerBuilder builder;
+		std::string connection_name = hostname + ":" + port_no;
+	    	builder.AddListeningPort(connection_name, grpc::InsecureServerCredentials());
+	
+	    	
+	    	builder.RegisterService(this);
+	    	
+	    	// Finally we can assemble the server.
+	    	std::unique_ptr<Server> server(builder.BuildAndStart());
+	    	
+	    	// Wait for the server to shutdown.
+	    	server->Wait();
 		
 	}
 };
 
+// function that will catch ctrl C
+// will close log file
+void handle_server_close(int p){
+	std::cout<<"closing server"<<std::endl;
+	new_log_file.close();
+	std::exit(0);
+}
 
 int main(int argc, char** argv) {
 	std::string port = "3010";
@@ -265,18 +417,8 @@ int main(int argc, char** argv) {
 			std::cerr << "Invalid Command Line Argument\n";
 		}
 	}
-	ServerBuilder builder;
-	std::string connection_name = "localhost:" + port;
-    	builder.AddListeningPort(connection_name, grpc::InsecureServerCredentials());
-	
-    	std::cout<<"server now listening"<<std::endl;
-    	TNSServiceImpl service;
-    	builder.RegisterService(&service);
-    	std::cout<<"server registered"<<std::endl;
-    	// Finally we can assemble the server.
-    	std::unique_ptr<Server> server(builder.BuildAndStart());
-    
-    	// Wait for the server to shutdown.
-    	server->Wait();
 
+	std::string connection_name = "localhost";
+    	TNSServiceImpl server;
+	server.run_server(connection_name, port);
 }
